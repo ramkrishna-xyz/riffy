@@ -1,52 +1,44 @@
 # Riffy [![NPM version](https://img.shields.io/npm/v/riffy.svg?style=flat-square&color=informational)](https://npmjs.com/package/riffy)
+Riffy is a modern, lightweight, and highly extensible Lavalink client for Node.js. It is meticulously crafted to simplify the development of high-performance music bots by providing a robust and intuitive interface for managing audio streams, queues, and player states. Riffy acts as a high-level abstraction over the Lavalink API, allowing you to focus on your bot's core logic without getting bogged down in low-level voice protocol details.
+Table of Contents
+ * Key Features
+ * Getting Started
+   * Prerequisites
+   * Installation
+ * Core Concepts
+ * API & Usage
+   * Initialization
+   * Basic Commands (!play, !skip, !stop)
+ * Configuration
+ * Events
+ * Troubleshooting
+ * Community & Support
+ * Our Team
+ * License
+Key Features
+Riffy is engineered to be a comprehensive and flexible solution, offering a suite of features that simplify bot development:
+ * Broad Lavalink Protocol Support: Maintains compatibility with both version 3 and version 4 of the Lavalink protocols, ensuring seamless integration with existing and future nodes.
+ * Intuitive Autoplay: Provides intelligent autoplay support for major platforms, including YouTube, SoundCloud, and Spotify, ensuring continuous music playback.
+ * Universal Discord Library Compatibility: Works effortlessly with any Node.js-based Discord library, such as discord.js and Eris.
+ * Comprehensive Filter Support: Access and apply all available Lavalink filters to fine-tune audio output, including equalizer, bassboost, karaoke, and more.
+ * Lightweight & Performant: A minimalist design ensures low resource usage and high performance, critical for handling numerous voice connections efficiently.
+ * Extensible Architecture: Designed with extensibility in mind, allowing for custom functionality and integrations.
+Getting Started
+Prerequisites
+Before using Riffy, you must have a running Lavalink node. You can find the latest version here or use a free, public node from the official Riffy resources.
+Installation
+Install Riffy from npm, along with your chosen Discord library.
+npm install riffy discord.js
 
-A lavalink client for Node.JS, designed to be simple and easy to use. Compatible with all Discord libraries (discord.js, Eris, etc.).
-
-## Installation
-
-```shell
-npm install riffy
-```
-
-## Features
-
--   Supports versions 3 and 4 of the Lavalink protocols.
--   Autoplay support for YouTube, SoundCloud, and Spotify.
--   Compatible with all Discord libraries (discord.js, Eris, etc.).
--   Works with all Lavalink filters.
-
-## Example Project
-
--   [Riffy Music Bot](https://github.com/riffy-team/riffy-music-bot)
-
-## Documentation
-
--   [Documentation](https://riffy.js.org)
--   [Discord Server](https://discord.gg/TvjrWtEuyP)
-
-## Quick Start
-
-First things first, you need to have a Lavalink node running. You can download the latest version of Lavalink from [here](https://github.com/lavalink-devs/Lavalink), or you can use [this nodes](https://riffy.js.org/resources) for free.
-
-> [!NOTE]
-> This project uses `MessageContent` intent, so make sure to enable it in your application settings.
-
-### Creating a Project
-
-We are using [discord.js](https://discord.js.org/) for this example, but you can use any Discord library you prefer.
-
-Import the `Riffy` class from the `riffy` package.
-
-```js
-// For CommonJS
-const { Riffy } = require("riffy");
-// For ES6
-import { Riffy } from "riffy";
-```
-
-Below is an example of a basic Discord music bot using Discord.js and Riffy. (Lavalink V4)
-
-```js
+Core Concepts
+Understanding these core components will help you build your bot more effectively:
+ * Riffy Client: The main client instance that manages all connections to Lavalink nodes, handles events, and provides the primary API for interacting with players.
+ * Node: Represents a single, connected Lavalink server. Riffy automatically manages the connection state and load balancing across all configured nodes.
+ * Player: A local representation of a Lavalink player. It holds the queue, manages the player state (playing, paused, etc.), and controls the playback for a specific guild.
+ * Queue: A data structure within each Player that stores the list of tracks to be played. Riffy's queue handles track addition, removal, and playback order.
+API & Usage
+Initialization
+Initialize the Riffy client and pass your Discord client instance along with your node configurations.
 // index.js
 
 const { Client, GatewayDispatchEvents } = require("discord.js");
@@ -78,7 +70,7 @@ client.riffy = new Riffy(client, nodes, {
         if (guild) guild.shard.send(payload);
     },
     defaultSearchPlatform: "ytmsearch",
-    restVersion: "v4", // Or "v3" based on your Lavalink version.
+    restVersion: "v4",
 });
 
 client.on("ready", () => {
@@ -86,16 +78,20 @@ client.on("ready", () => {
     console.log(`Logged in as ${client.user.tag}`);
 });
 
+Basic Commands
+Here is a comprehensive example demonstrating the !play, !skip, and !stop commands.
 client.on("messageCreate", async (message) => {
     if (!message.content.startsWith("!") || message.author.bot) return;
 
     const args = message.content.slice(1).trim().split(" ");
     const command = args.shift().toLowerCase();
+    const query = args.join(" ");
 
     if (command === "play") {
-        const query = args.join(" ");
+        if (!message.member.voice.channel) {
+            return message.channel.send("You must be in a voice channel to use this command.");
+        }
 
-        // Create a player.
         const player = client.riffy.createConnection({
             guildId: message.guild.id,
             voiceChannel: message.member.voice.channel.id,
@@ -107,122 +103,82 @@ client.on("messageCreate", async (message) => {
             query: query,
             requester: message.author,
         });
-        const { loadType, tracks, playlistInfo } = resolve;
 
-        /**
-         * Important: If you are using Lavalink V3, here are the changes you need to make:
-         *
-         * 1. Replace "playlist" with "PLAYLIST_LOADED"
-         * 2. Replace "search" with "SEARCH_RESULT"
-         * 3. Replace "track" with "TRACK_LOADED"
-         */
+        const { loadType, tracks, playlistInfo } = resolve;
 
         if (loadType === "playlist") {
             for (const track of resolve.tracks) {
                 track.info.requester = message.author;
                 player.queue.add(track);
             }
-
             message.channel.send(
                 `Added: \`${tracks.length} tracks\` from \`${playlistInfo.name}\``
             );
-            if (!player.playing && !player.paused) return player.play();
         } else if (loadType === "search" || loadType === "track") {
             const track = tracks.shift();
             track.info.requester = message.author;
-
             player.queue.add(track);
             message.channel.send(`Added: \`${track.info.title}\``);
-            if (!player.playing && !player.paused) return player.play();
         } else {
             return message.channel.send("There are no results found.");
         }
-    }
-});
 
-// This will send log when the lavalink node is connected.
-client.riffy.on("nodeConnect", (node) => {
-    console.log(`Node "${node.name}" connected.`);
-});
-
-// This will send log when the lavalink node faced an error.
-client.riffy.on("nodeError", (node, error) => {
-    console.log(`Node "${node.name}" encountered an error: ${error.message}.`);
-});
-
-// This is the event handler for track start.
-client.riffy.on("trackStart", async (player, track) => {
-    const channel = client.channels.cache.get(player.textChannel);
-
-    channel.send(`Now playing: \`${track.info.title}\` by \`${track.info.author}\`.`);
-});
-
-// This is the event handler for queue end.
-client.riffy.on("queueEnd", async (player) => {
-    const channel = client.channels.cache.get(player.textChannel);
-
-    // Set this to true if you want to enable autoplay.
-    const autoplay = false;
-
-    if (autoplay) {
-        player.autoplay(player);
-    } else {
+        if (!player.playing && !player.paused) {
+            player.play();
+        }
+    } else if (command === "skip") {
+        const player = client.riffy.players.get(message.guild.id);
+        if (!player || !player.queue.length) {
+            return message.channel.send("There is no music to skip.");
+        }
+        player.stop();
+        message.channel.send("Skipped the current track.");
+    } else if (command === "stop") {
+        const player = client.riffy.players.get(message.guild.id);
+        if (!player || !player.queue.length) {
+            return message.channel.send("There is no music playing.");
+        }
         player.destroy();
-        channel.send("Queue has ended.");
+        message.channel.send("Stopped the music and cleared the queue.");
     }
 });
 
-// This will update the voice state of the player.
-client.on("raw", (d) => {
-    if (
-        ![
-            GatewayDispatchEvents.VoiceStateUpdate,
-            GatewayDispatchEvents.VoiceServerUpdate,
-        ].includes(d.t)
-    )
-        return;
-    client.riffy.updateVoiceState(d);
-});
-
-client.login("Discord-Bot-Token-Here");
-```
-
-### Running the Bot
-
-Now that we have created our project, we can run our bot by typing the following command in the terminal.
-
-```shell
-# node.js
-node index.js
-# bun
-bun run index.js
-```
-
-After running the bot, you can invite it to your server and use the `!play` command to play music.
-
-### Conclusion
-
-That's it! You have successfully created a discord music bot using riffy. If you have any questions, feel free to join our [discord server](https://discord.gg/TvjrWtEuyP).
-
-We have set this example by keeping in mind that you know the basics of discord.js or any other discord library you are using.
-
-## Our Team
-
-🟪 Elitex
-
--   Github: [@Elitex](https://github.com/Elitex07)
--   Discord: @elitex
-
-🟥 FlameFace
-
--   Github: [@FlameFace](https://github.com/flam3face)
--   Discord: @flameface
-
-🟦 UnschooledGamer
-
--   Github: [@UnschooledGamer](https://github.com/UnschooledGamer)
--   Discord: @unschooledgamer
-
-## License
-
-This project is licensed under the [MIT License](./LICENSE)
+Configuration
+The Riffy constructor accepts an object with the following properties:
+| Property | Type | Description |
+|---|---|---|
+| send | Function | (Required) A function to send voice payloads to Discord. This is critical for Riffy to work. |
+| nodes | Array<Object> | (Required) An array of Lavalink node configurations. |
+| defaultSearchPlatform | String | The default platform for searching tracks (ytmsearch, ytsearch, scsearch). Defaults to ytmsearch. |
+| restVersion | String | The Lavalink REST API version to use. Must be either 'v3' or 'v4'. |
+| resumeKey | String | A key to enable session resuming. |
+| trackPartial | Boolean | Whether to send partial track data. Defaults to false. |
+Events
+Riffy extends EventEmitter, providing a number of events to help you manage your bot's state.
+| Event | Parameters | Description |
+|---|---|---|
+| nodeConnect | node | Emitted when a Lavalink node successfully connects. |
+| nodeDisconnect | node, reason | Emitted when a node disconnects. reason provides a description. |
+| nodeError | node, error | Emitted when a node encounters an error. |
+| trackStart | player, track | Emitted when a track starts playing. |
+| trackEnd | player, track, reason | Emitted when a track finishes or is stopped. reason gives details. |
+| trackError | player, track, error | Emitted when an error occurs during playback. |
+| queueEnd | player | Emitted when the queue becomes empty. |
+Troubleshooting
+ * Bot not joining a voice channel: Ensure your bot has the CONNECT and SPEAK permissions in the channel. Also, double-check that GatewayDispatchEvents.VoiceStateUpdate and GatewayDispatchEvents.VoiceServerUpdate are being handled correctly in your raw event listener.
+ * Node "..." encountered an error: Connection refused: This means your bot cannot connect to the specified Lavalink node. Verify the host, port, and password in your nodes configuration. Make sure your Lavalink server is running and accessible from where you're running the bot.
+ * No sound from the bot: Check if your bot is deafened. If so, setting deaf: false in createConnection might help. Also, confirm the restVersion in your Riffy configuration matches your Lavalink server's version.
+Community & Support
+Join our community to get help, share ideas, and connect with other developers building with Riffy.
+ * Documentation: riffy.js.org
+ * Example Project: Riffy Music Bot
+ * Discord Server: discord.gg/TvjrWtEuyP
+Our Team
+We're a dedicated team of developers committed to creating high-quality, open-source tools for the Discord community.
+| Team Member | GitHub | Discord |
+|---|---|---|
+| 🟪 Elitex | @Elitex07 | @elitex |
+| 🟥 FlameFace | @FlameFace | @flameface |
+| 🟦 UnschooledGamer | @UnschooledGamer | @unschooledgamer |
+License
+This project is licensed under the MIT License.
