@@ -5,7 +5,7 @@ on:
   workflow_dispatch: 
   pull_request_review:
     types: [submitted]
-  pull_request: 
+  pull_request_target: 
     types: [labeled, synchronize]
     paths: 
       - 'build/**'
@@ -24,7 +24,8 @@ on:
 
 permissions: 
   pull-requests: write
-
+  issues: write
+  contents: write
 
 jobs:
   approved:
